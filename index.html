@@ -1,10 +1,18 @@
+const WORKER = 'https://royal-field-b7e1.shrckdi1.workers.dev';
+const SIDO = {
+  서울:'서울특별시',부산:'부산광역시',대구:'대구광역시',인천:'인천광역시',
+  광주:'광주광역시',대전:'대전광역시',울산:'울산광역시',세종:'세종특별자치시',
+  경기:'경기도',강원:'강원특별자치도',충북:'충청북도',충남:'충청남도',
+  전북:'전북특별자치도',전남:'전라남도',경북:'경상북도',경남:'경상남도',제주:'제주특별자치도'
+};
+
 async function doSearch() {
   const raw = document.getElementById('inp').value.trim();
   if (!raw) return;
   const btn = document.getElementById('btn');
   const div = document.getElementById('result');
   btn.disabled = true;
-  div.innerHTML = '<div class="msg">🔍 조회 중...</div>';
+  div.innerHTML = '<div class="msg">🔍 심평원 다이렉트 검색 중...</div>';
 
   try {
     let parts = raw.split(/\s+/);
@@ -16,37 +24,34 @@ async function doSearch() {
     }
     const name = parts.join(' ');
 
-    // 1단계: 병원 검색
+    // 1단계: 워커를 통해 심평원 리스트 직접 조회
     const r1 = await fetch(`${WORKER}?q=${encodeURIComponent(name)}&sido=${encodeURIComponent(sido)}`);
     if (!r1.ok) {
-      div.innerHTML = '<div class="msg">공공데이터 서버 응답 지연<br>잠시 후 다시 시도해 주세요.</div>';
+      div.innerHTML = '<div class="msg">심평원 서버 연결 실패<br>잠시 후 다시 시도해 주세요.</div>';
       return;
     }
     
     const j1 = await r1.json();
-    const items = j1?.response?.body?.items?.item || [];
-    const list = Array.isArray(items) ? items : (items ? [items] : []);
+    const list = j1.items || [];
 
     if (!list.length) {
-      div.innerHTML = '<div class="msg">검색 결과 없음<br>병원명을 짧게 줄여보세요</div>';
+      div.innerHTML = '<div class="msg">검색 결과 없음<br>병원명을 줄이거나 정확하게 입력해 보세요.</div>';
       return;
     }
 
-    // 2단계: ykiho 디코딩 (워커를 통해 심평원 Ajax 우회 크롤링)
+    // 2단계: 획득한 암호문으로 팝업창 매칭 루프 가동
     let html = '';
-    for (const h of list.slice(0, 5)) {
-      // 주소 창에서 깔끔하게 매칭하기 위해 암호화 ykiho 그대로 전달
+    for (const h of list) {
       const r2 = await fetch(`${WORKER}?ykiho=${encodeURIComponent(h.ykiho)}`);
       let ykiho = '-';
       if (r2.ok) {
         const j2 = await r2.json();
         ykiho = j2.ykiho || '-';
       }
-      const addr = h.addr1 || '';
 
       html += `<div class="card">
         <div class="hosp-name">${h.yadmNm}</div>
-        <div class="hosp-addr">${addr}</div>
+        <div class="hosp-addr">${h.addr1}</div>
         <div class="ykiho-label">요양기관기호</div>
         <div class="ykiho-value">${ykiho}</div>
         ${ykiho !== '-' ? `<button class="copy-btn" onclick="copy('${ykiho}',this)">📋 복사</button>` : ''}
@@ -58,4 +63,11 @@ async function doSearch() {
   } finally {
     btn.disabled = false;
   }
+}
+
+function copy(text, btn) {
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = '✅ 복사됨!';
+    setTimeout(()=>btn.textContent='📋 복사', 1500);
+  });
 }
