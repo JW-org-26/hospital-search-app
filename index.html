@@ -21,6 +21,9 @@
     <div id="result"></div>
 
     <script>
+        // 🔥 여기에 회원님의 실제 Worker 주소를 넣으세요 (예: https://my-worker.subdomain.workers.dev)
+        const WORKER_URL = "https://[본인의-워커-주소].workers.dev";
+
         async function searchHospital() {
             const input = document.getElementById('hospitalInput').value;
             const resultDiv = document.getElementById('result');
@@ -33,8 +36,7 @@
             resultDiv.innerText = "조회 중...";
 
             try {
-                // 여기에 본인의 Cloudflare Worker 주소를 넣으세요
-                const response = await fetch(`https://[본인의-워커-주소].workers.dev/?q=${encodeURIComponent(input)}`);
+                const response = await fetch(`${WORKER_URL}/?q=${encodeURIComponent(input)}`);
                 const data = await response.json();
 
                 if (data.items && data.items.length > 0) {
@@ -44,7 +46,7 @@
                     resultDiv.innerText = "해당 병원을 찾을 수 없습니다.";
                 }
             } catch (e) {
-                resultDiv.innerText = "오류가 발생했습니다: " + e.message;
+                resultDiv.innerText = "오류가 발생했습니다. Worker 주소를 확인하세요.";
             }
         }
     </script>
