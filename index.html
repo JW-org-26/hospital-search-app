@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>요양기관기호 조회</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Noto Sans KR', sans-serif;
+         background: #f0f4f8; min-height: 100vh; padding: 20px; }
+  .wrap { max-width: 480px; margin: 0 auto; }
+  h1 { font-size: 20px; font-weight: 700; color: #1a1a2e; margin-bottom: 6px; }
+  .sub { font-size: 13px; color: #888; margin-bottom: 20px; }
+  .search-box { display: flex; gap: 8px; margin-bottom: 16px; }
+  input { flex: 1; padding: 14px 16px; border: 2px solid #e0e0e0; border-radius: 12px;
+          font-size: 16px; outline: none; transition: border-color .2s; }
+  input:focus { border-color: #4f46e5; }
+  button { padding: 14px 20px; background: #4f46e5; color: #fff; border: none;
+           border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer;
+           white-space: nowrap; transition: background .2s; }
+  button:hover { background: #4338ca; }
+  button:disabled { background: #a5b4fc; cursor: not-allowed; }
+  .card { background: #fff; border-radius: 14px; padding: 18px;
+          margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+  .hosp-name { font-size: 17px; font-weight: 700; color: #1a1a2e; margin-bottom: 4px; }
+  .hosp-addr { font-size: 13px; color: #777; margin-bottom: 12px; }
+  .ykiho-label { font-size: 12px; color: #4f46e5; font-weight: 600; letter-spacing: .5px; }
+  .ykiho-value { font-size: 28px; font-weight: 800; color: #1a1a2e; letter-spacing: 2px;
+                 font-family: 'Courier New', monospace; }
+  .copy-btn { margin-top: 10px; padding: 8px 16px; background: #f0f0ff;
+              color: #4f46e5; border: 1px solid #c7d2fe; border-radius: 8px;
+              font-size: 13px; cursor: pointer; font-weight: 600; }
+  .copy-btn:hover { background: #e0e7ff; }
+  .msg { text-align: center; color: #888; font-size: 14px; padding: 30px; }
+  .spinner { text-align: center; padding: 30px; color: #4f46e5; font-size: 14px; }
+  .notice { background: #fffbeb; border: 1px solid #fcd34d; border-radius: 10px;
+            padding: 10px 14px; font-size: 12px; color: #92400e; margin-bottom: 16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🏥 요양기관기호 조회</h1>
+  <p class="sub">병원명을 입력하면 8자리 기호를 조회합니다</p>
+
+  <div class="search-box">
+    <input id="inp" type="text" placeholder="예) 은준영내과  /  서울 강남내과"
+           onkeydown="if(event.key==='Enter')search()">
+    <button id="btn" onclick="search()">조회</button>
+  </div>
+
+  <div id="result"></div>
+</div>
+
+<script>
+const BASE = 'https://www.hira.or.kr/ra/hosp';
+const SIDO = {
+  서울:'110000',부산:'210000',대구:'220000',인천:'230000',
+  광주:'240000',대전:'250000',울산:'260000',세종:'290000',
+  경기:'410000',강원:'420000',충북:'430000',충남:'440000',
+  전북:'450000',전남:'460000',경북:'470000',경남:'480000',제주:'500000'
+};
+
+async function post(url, data) {
+  const body = Object.entries(data).map(([k,v])=>k+'='+encodeURIComponent(v)).join('&');
+  const proxies = [
+    u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+    u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u+'?'+body)}`,
+    u => `https://thingproxy.freeboard.io/fetch/${u}`,
+  ];
+  for (const mkProxy of proxies) {
+    try {
+      const r = await fetch(mkProxy(url), {
+        method: 'POST',
+        headers: {'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8','X-Requested-With':'XMLHttpRequest'},
+        body
+      });
+      if (r.ok) return r;
+    } catch(e) { continue; }
+  }
+  throw new Error('연결 실패 - 잠시 후 다시 시도해주세요');
+}
+
+async function search() {
+  const raw = document.getElementById('inp').value.trim();
+  if (!raw) return;
+
+  const btn = document.getElementById('btn');
+  const div = document.getElementById('result');
+  btn.disabled = true;
+  div.innerHTML = '<div class="spinner">🔍 조회 중...</div>';
+
+  try {
+    // 지역 파싱
+    let parts = raw.split(/\s+/);
+    let sido = '';
+    for (const [k, v] of Object.entries(SIDO)) {
+      if (parts[0].includes(k)) { sido = v; parts = parts.slice(1); break; }
+    }
+    const name = parts.join(' ');
+
+    // 1단계: 병원 검색
+    const r1 = await post(BASE + '/selectHospSrchDtnListAjax.do', {
+      pageIndex:'1', numOfRows:'10', yadmNm: name,
+      sidoCd: sido, sgguCd:'', srchMode:'NM', mode:'01'
+    });
+    const j1 = await r1.json();
+    const list = j1.data?.hospList || [];
+
+    if (!list.length) {
+      div.innerHTML = '<div class="msg">검색 결과가 없습니다.<br>병원명을 다시 확인해주세요.</div>';
+      return;
+    }
+
+    // 2단계: 각 병원 ykiho 조회
+    let html = '';
+    for (const h of list.slice(0, 5)) {
+      const r2 = await post(BASE + '/hospInfoAjax.do', { ykiho: h.ykiho });
+      const text = await r2.text();
+      const m = text.match(/name=.ykiho.[^>]*value=.(\d{8})/) ||
+                text.match(/value=.(\d{8}).[^>]*name=.ykiho/);
+      const ykiho = m ? m[1] : '조회실패';
+
+      html += `
+        <div class="card">
+          <div class="hosp-name">${h.yadmNm}</div>
+          <div class="hosp-addr">${h.addr || ''}</div>
+          <div class="ykiho-label">요양기관기호</div>
+          <div class="ykiho-value">${ykiho}</div>
+          ${ykiho !== '조회실패' ? `<button class="copy-btn" onclick="copy('${ykiho}', this)">📋 복사</button>` : ''}
+        </div>`;
+    }
+    div.innerHTML = html;
+
+  } catch(e) {
+    div.innerHTML = `<div class="msg">오류가 발생했습니다.<br><small>${e.message}</small></div>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function copy(text, btn) {
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = '✅ 복사됨!';
+    setTimeout(() => btn.textContent = '📋 복사', 1500);
+  });
+}
+</script>
+</body>
+</html>
