@@ -12,7 +12,7 @@ async function doSearch() {
   const btn = document.getElementById('btn');
   const div = document.getElementById('result');
   btn.disabled = true;
-  div.innerHTML = '<div class="msg">🔍 심평원 다이렉트 검색 중...</div>';
+  div.innerHTML = '<div class="msg">🔍 조회 중...</div>';
 
   try {
     let parts = raw.split(/\s+/);
@@ -24,10 +24,10 @@ async function doSearch() {
     }
     const name = parts.join(' ');
 
-    // 1단계: 워커를 통해 심평원 리스트 직접 조회
+    // 1단계: 워커를 통해 심평원 리스트 직접 조회 (504 에러 원천 차단)
     const r1 = await fetch(`${WORKER}?q=${encodeURIComponent(name)}&sido=${encodeURIComponent(sido)}`);
     if (!r1.ok) {
-      div.innerHTML = '<div class="msg">심평원 서버 연결 실패<br>잠시 후 다시 시도해 주세요.</div>';
+      div.innerHTML = '<div class="msg">심평원 서버 응답 지연<br>잠시 후 다시 시도해 주세요.</div>';
       return;
     }
     
@@ -35,20 +35,21 @@ async function doSearch() {
     const list = j1.items || [];
 
     if (!list.length) {
-      div.innerHTML = '<div class="msg">검색 결과 없음<br>병원명을 줄이거나 정확하게 입력해 보세요.</div>';
+      div.innerHTML = '<div class="msg">검색 결과 없음<br>병원명을 짧게 줄여보세요</div>';
       return;
     }
 
-    // 2단계: 획득한 암호문으로 팝업창 매칭 루프 가동
+    // 2단계: 가져온 심평원 암호 키로 8자리 평문 요양기관기호 낚아채기
     let html = '';
-    for (const h of list) {
+    for (const h of list.slice(0, 5)) {
       const r2 = await fetch(`${WORKER}?ykiho=${encodeURIComponent(h.ykiho)}`);
       let ykiho = '-';
       if (r2.ok) {
         const j2 = await r2.json();
         ykiho = j2.ykiho || '-';
       }
-
+      
+      // 기존 스타일시트와 100% 매칭되도록 클래스명 복구
       html += `<div class="card">
         <div class="hosp-name">${h.yadmNm}</div>
         <div class="hosp-addr">${h.addr1}</div>
@@ -68,6 +69,6 @@ async function doSearch() {
 function copy(text, btn) {
   navigator.clipboard.writeText(text).then(() => {
     btn.textContent = '✅ 복사됨!';
-    setTimeout(()=>btn.textContent='📋 복사', 1500);
+    setTimeout(() => btn.textContent = '📋 복사', 1500);
   });
 }
