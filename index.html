@@ -26,7 +26,7 @@
         .ykiho-num { font-size: 18px; font-weight: 700; color: #0f172a; letter-spacing: 0.5px; }
         .copy-btn { margin-left: auto; background: white; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; font-weight: 500; display: flex; align-items: center; gap: 4px; transition: all 0.2s; }
         .copy-btn:hover { background: #f1f5f9; border-color: #94a3b8; }
-        .error-msg { color: #ef4444; background: #fef2f2; padding: 12px 16px; border-radius: 12px; border: 1px solid #fee2e2; font-size: 14px; }
+        .error-msg { color: #ef4444; background: #fef2f2; padding: 12px 16px; border-radius: 12px; border: 1px solid #fee2e2; font-size: 14px; text-align: center; }
     </style>
 </head>
 <body>
@@ -78,7 +78,7 @@ async function doSearch() {
         }
         const name = parts.join(' ');
 
-        // 1단계: 심평원 엔진 검색
+        // 1단계: 내 워커 엔진 호출
         const r1 = await fetch(`${WORKER}?q=${encodeURIComponent(name)}&sido=${encodeURIComponent(sido)}`);
         if (!r1.ok) {
             div.innerHTML = '<div class="error-msg">❌ 서버 연결 실패. 잠시 후 다시 시도해 주세요.</div>';
@@ -95,5 +95,46 @@ async function doSearch() {
 
         let html = '';
         
-        // 2단계: 8자리 평문 기호 추출 매칭
+        // 2단계: 암호키 매칭해서 진짜 8자리 요양기관기호 꽂기
         for (const h of list.slice(0, 5)) {
+            let ykiho = '-';
+            
+            const r2 = await fetch(`${WORKER}?ykiho=${encodeURIComponent(h.ykiho)}`);
+            if (r2.ok) {
+                const j2 = await r2.json();
+                ykiho = j2.ykiho || '-';
+            }
+
+            const addr = h.addr1 || '';
+
+            html += `
+                <div class="card">
+                    <div class="hosp-name">${h.yadmNm}</div>
+                    <div class="hosp-addr">${addr}</div>
+                    <div class="badge">요양기관기호</div>
+                    <div class="ykiho-wrapper">
+                        <div class="ykiho-num">${ykiho}</div>
+                        ${ykiho !== '-' ? `<button class="copy-btn" onclick="copy('${ykiho}', this)">📋 복사</button>` : ''}
+                    </div>
+                </div>
+            `;
+        }
+        div.innerHTML = html;
+
+    } catch(e) {
+        div.innerHTML = `<div class="error-msg">⚠️ 오류: ${e.message}</div>`;
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+function copy(text, btn) {
+    navigator.clipboard.writeText(text).then(() => {
+        btn.textContent = '✅ 복사됨!';
+        setTimeout(() => { btn.textContent = '📋 복사'; }, 1500);
+    });
+}
+</script>
+
+</body>
+</html>
