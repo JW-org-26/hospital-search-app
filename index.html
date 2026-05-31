@@ -44,12 +44,14 @@ button:disabled { background: #a5b4fc; }
 </div>
 
 <script>
-const WORKER = 'https://royal-field-b7e1.shrckdi1.workers.dev';
+const KEY = '129d37b913a701e7a6a65f82f1564e73290e34ea583bdfd4c948a21c7f4cc866';
+const API = 'https://apis.data.go.kr/B551182/hospInfoServicev2/getHospBasisList';
+
 const SIDO = {
-  서울:'110000',부산:'210000',대구:'220000',인천:'230000',
-  광주:'240000',대전:'250000',울산:'260000',세종:'290000',
-  경기:'410000',강원:'420000',충북:'430000',충남:'440000',
-  전북:'450000',전남:'460000',경북:'470000',경남:'480000',제주:'500000'
+  서울:'서울특별시', 부산:'부산광역시', 대구:'대구광역시', 인천:'인천광역시',
+  광주:'광주광역시', 대전:'대전광역시', 울산:'울산광역시', 세종:'세종특별자치시',
+  경기:'경기도', 강원:'강원특별자치도', 충북:'충청북도', 충남:'충청남도',
+  전북:'전북특별자치도', 전남:'전라남도', 경북:'경상북도', 경남:'경상남도', 제주:'제주특별자치도'
 };
 
 async function doSearch() {
@@ -62,34 +64,40 @@ async function doSearch() {
 
   try {
     let parts = raw.split(/\s+/);
-    let sido = '';
+    let sidoNm = '';
     for (const [k, v] of Object.entries(SIDO)) {
       if (parts[0] === k || parts[0].startsWith(k)) {
-        sido = v; parts = parts.slice(1); break;
+        sidoNm = v; parts = parts.slice(1); break;
       }
     }
     const name = parts.join(' ');
 
-    // Worker에 GET으로 검색
-    const r1 = await fetch(`${WORKER}?q=${encodeURIComponent(name)}&sido=${sido}`);
-    const j1 = await r1.json();
-    const list = j1.data?.hospList || [];
+    const params = new URLSearchParams({
+      ServiceKey: KEY,
+      yadmNm: name,
+      numOfRows: '10',
+      pageNo: '1',
+      _type: 'json'
+    });
+    if (sidoNm) params.append('sidoCdNm', sidoNm);
 
-    if (!list.length) {
+    const r = await fetch(`${API}?${params}`);
+    const j = await r.json();
+    const items = j?.response?.body?.items?.item || [];
+    const list = Array.isArray(items) ? items : [items];
+
+    if (!list.length || !list[0]) {
       div.innerHTML = '<div class="msg">검색 결과 없음<br>병원명을 짧게 줄여보세요</div>';
       return;
     }
 
     let html = '';
     for (const h of list.slice(0, 5)) {
-      // ykiho 조회
-      const r2 = await fetch(`${WORKER}?ykiho=${encodeURIComponent(h.ykiho)}`);
-      const j2 = await r2.json();
-      const ykiho = j2.ykiho || '-';
-
+      const ykiho = h.ykiho || '-';
+      const addr = [h.addr1, h.addr2].filter(Boolean).join(' ') || h.addr || '';
       html += `<div class="card">
         <div class="hosp-name">${h.yadmNm}</div>
-        <div class="hosp-addr">${h.addr||''}</div>
+        <div class="hosp-addr">${addr}</div>
         <div class="ykiho-label">요양기관기호</div>
         <div class="ykiho-value">${ykiho}</div>
         ${ykiho!=='-'?`<button class="copy-btn" onclick="copy('${ykiho}',this)">📋 복사</button>`:''}
