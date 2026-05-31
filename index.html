@@ -42,7 +42,7 @@ button:disabled { background: #a5b4fc; }
   </div>
   <div id="result"></div>
 </div>
-
+ 
 <script>
 const BASE = 'https://www.hira.or.kr/ra/hosp';
 const SIDO = {
@@ -51,7 +51,7 @@ const SIDO = {
   경기:'410000',강원:'420000',충북:'430000',충남:'440000',
   전북:'450000',전남:'460000',경북:'470000',경남:'480000',제주:'500000'
 };
-
+ 
 async function hiroPost(endpoint, params) {
   // 캐시 방지: 매 요청마다 고유값 추가
   params._t = Date.now();
@@ -67,7 +67,7 @@ async function hiroPost(endpoint, params) {
   if (!res.ok) throw new Error('오류 ' + res.status);
   return res;
 }
-
+ 
 async function doSearch() {
   const raw = document.getElementById('inp').value.trim();
   if (!raw) return;
@@ -75,7 +75,7 @@ async function doSearch() {
   const div = document.getElementById('result');
   btn.disabled = true;
   div.innerHTML = '<div class="msg">🔍 조회 중...</div>';
-
+ 
   try {
     // 지역 파싱
     let parts = raw.split(/\s+/);
@@ -86,7 +86,7 @@ async function doSearch() {
       }
     }
     const name = parts.join(' ');
-
+ 
     // 1단계: 병원 검색
     const r1 = await hiroPost('/selectHospSrchDtnListAjax.do', {
       pageIndex:'1', numOfRows:'10', yadmNm: name,
@@ -94,12 +94,12 @@ async function doSearch() {
     });
     const j1 = await r1.json();
     const list = j1.data?.hospList || [];
-
+ 
     if (!list.length) {
       div.innerHTML = '<div class="msg">검색 결과 없음.<br>병원명 줄여서 다시 검색해보세요.</div>';
       return;
     }
-
+ 
     // 2단계: 각 병원 ykiho 조회
     let html = '';
     for (const h of list.slice(0, 5)) {
@@ -123,7 +123,7 @@ async function doSearch() {
     btn.disabled = false;
   }
 }
-
+ 
 function copy(text, btn) {
   navigator.clipboard.writeText(text).then(() => {
     btn.textContent = '✅ 복사됨!';
