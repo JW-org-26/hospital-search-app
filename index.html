@@ -1,75 +1,135 @@
-export default {
-  async fetch(req) {
-    const cors = {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
-    };
-    if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>요양기관기호 즉시 조회</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        body { background-color: #f0f4f8; color: #333; padding: 40px 20px; display: flex; flex-direction: column; align-items: center; }
+        .container { max-width: 600px; width: 100%; text-align: center; }
+        .title-area { margin-bottom: 30px; }
+        .title-area h1 { font-size: 26px; color: #1e293b; margin-bottom: 8px; }
+        .search-box { display: flex; gap: 10px; background: white; padding: 10px; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-bottom: 30px; }
+        .search-box input { flex: 1; border: none; padding: 12px 16px; font-size: 16px; outline: none; }
+        .search-box button { background-color: #4f46e5; color: white; border: none; padding: 0 24px; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; }
+        #result { display: flex; flex-direction: column; gap: 16px; width: 100%; text-align: left; }
+        .card { background: white; padding: 24px; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+        .hosp-name { font-size: 19px; font-weight: 700; color: #0f172a; margin-bottom: 6px; }
+        .hosp-addr { font-size: 14px; color: #64748b; margin-bottom: 14px; }
+        .ykiho-wrapper { display: flex; align-items: center; gap: 10px; background: #f8fafc; padding: 12px 16px; border-radius: 10px; border: 1px dashed #cbd5e1; }
+        .ykiho-num { font-size: 18px; font-weight: 700; color: #0f172a; }
+        .copy-btn { margin-left: auto; background: white; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; }
+        .error-msg { background: #fef2f2; color: #ef4444; padding: 16px; border-radius: 12px; border: 1px solid #fee2e2; text-align: center; }
+        .debug-box { text-align: left; font-size: 11px; margin-top: 15px; background: #fff; padding: 10px; max-height: 200px; overflow: auto; border: 1px solid #ddd; border-radius: 8px; }
+    </style>
+</head>
+<body>
 
-    const url = new URL(req.url);
-    const name = url.searchParams.get('q') || '';
+<div class="container">
+    <div class="title-area">
+        <h1>🏥 요양기관기호 조회</h1>
+        <p style="color:#64748b;">병원명 입력 → 8자리 기호 즉시 조회</p>
+    </div>
 
-    const commonHeaders = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept': 'application/json, text/javascript, */*; q=0.01',
-      'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-      'X-Requested-With': 'XMLHttpRequest',
-      'Referer': 'https://www.hira.or.kr/ra/hosp/getHealthMap.do'
-    };
+    <div class="search-box">
+        <input type="text" id="inp" placeholder="예: 안동 성소병원 또는 은준영" onkeydown="if(event.key==='Enter') window.HospApp.search()">
+        <button id="btn" onclick="window.HospApp.search()">조회</button>
+    </div>
 
-    try {
-      // 💡 심평원 서버가 요구하는 필수 파라미터 규격을 완벽히 일치시킵니다.
-      const formData = new URLSearchParams();
-      formData.append('searchKeyword', name);
-      formData.append('searchFlag', 'A'); // 심평원 엔진에서 전체 조회를 활성화하는 마스터 플래그
+    <div id="result"></div>
+</div>
 
-      const r = await fetch('https://www.hira.or.kr/ra/hosp/getHealthMapList.do', {
-        method: 'POST',
-        headers: {
-          ...commonHeaders,
-          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-        },
-        body: formData.toString()
-      });
+<script>
+window.HospApp = {
+    WORKER: 'https://royal-field-b7e1.shrckdi1.workers.dev',
+    
+    search: async function() {
+        const name = document.getElementById('inp').value.trim();
+        if (!name) return;
+        
+        const btn = document.getElementById('btn');
+        const div = document.getElementById('result');
+        
+        btn.disabled = true;
+        div.innerHTML = '<div style="text-align:center; color:#4f46e5; font-weight:600;">🔍 심평원 서버에서 스캔 중...</div>';
 
-      const resData = await r.json();
-      const items = [];
+        try {
+            const res = await fetch(this.WORKER + '?q=' + encodeURIComponent(name));
+            const rawText = await res.text();
 
-      // 💡 심평원 실제 API의 응답 키는 대문자 'List'로 들어옵니다. (resData.List)
-      const list = resData.List || resData.list || resData.resList || [];
+            if (rawText.startsWith("WORKER_ERROR:")) {
+                div.innerHTML = `<div class="error-msg">서버 연결 오류입니다. 다시 시도해 주세요.</div>`;
+                return;
+            }
 
-      for (let i = 0; i < list.length; i++) {
-        if (items.length >= 5) break; // 최대 5개 노출
-        const h = list[i];
+            const items = [];
+            
+            // 핵심: 심평원이 뱉은 HTML 조각에서 fn_detail('암호', '병원명', '주소', ..., '기호') 패턴을 강제 추출
+            const regex = /fn_detail\s*\(([^)]+)\)/g;
+            let match;
+            
+            while ((match = regex.exec(rawText)) !== null) {
+                // 따옴표와 공백을 깔끔하게 제거하여 배열로 만듦
+                const args = match[1].split(',').map(s => s.replace(/['"\s]/g, ''));
+                if (args.length >= 3) {
+                    const yadmNm = args[1] || '이름없음';
+                    const addr = args[2] || '주소없음';
+                    // 인자들 중에서 정확히 숫자 8자리로 된 것만 골라냄 (요양기관기호)
+                    const ykiho = args.find(a => /^\d{8}$/.test(a)) || '-';
+                    
+                    items.push({ yadmNm, addr, ykiho });
+                }
+            }
 
-        // 💡 심평원 실시간 JSON 규격에 박혀있는 필드명을 명확하게 맵핑합니다.
-        // yadmNm: 병원명, ykiho: 8자리 진짜 요양기관기호, addr: 실제 주소
-        let hospName = h.yadmNm || h.YADMNM || '';
-        let ykihoNum = h.ykiho || h.YKIHO || '';
-        let address = h.addr || h.ADDR || '주소 정보 없음';
+            if (items.length === 0) {
+                // 심평원이 빈 결과를 줬거나 에러를 뱉었을 경우 디버그창 제공
+                div.innerHTML = `
+                    <div class="error-msg">
+                        📭 해당 병원을 찾을 수 없습니다. (이름을 줄여서 검색해 보세요)
+                        <details style="margin-top:15px;">
+                            <summary style="cursor:pointer; font-size:13px; color:#999; font-weight:bold;">🛠️ 심평원 실제 응답 확인 (디버그)</summary>
+                            <pre class="debug-box">${rawText.replace(/</g, '&lt;')}</pre>
+                        </details>
+                    </div>`;
+                return;
+            }
 
-        // HTML 태그 잔여물 제거
-        if (hospName) hospName = hospName.replace(/<\/?[^>]+(>|$)/g, "").trim();
-        if (address) address = address.replace(/<\/?[^>]+(>|$)/g, "").trim();
+            let html = '';
+            for (let i = 0; i < Math.min(items.length, 5); i++) {
+                const h = items[i];
+                html += `
+                    <div class="card">
+                        <div class="hosp-name">${h.yadmNm}</div>
+                        <div class="hosp-addr">${h.addr}</div>
+                        <div class="ykiho-wrapper">
+                            <div class="ykiho-num">${h.ykiho}</div>
+                            ${h.ykiho !== '-' ? `<button class="copy-btn" onclick="window.HospApp.copy('${h.ykiho}', this)">📋 복사</button>` : ''}
+                        </div>
+                    </div>`;
+            }
+            div.innerHTML = html;
 
-        if (hospName && ykihoNum) {
-          items.push({
-            yadmNm: hospName,
-            ykiho: ykihoNum, // 이제 복잡한 2차 우회 없이 8자리 기호가 다이렉트로 꽂힙니다.
-            addr1: address
-          });
+        } catch(e) {
+            div.innerHTML = `<div class="error-msg">시스템 오류: ${e.message}</div>`;
+        } finally {
+            btn.disabled = false;
         }
-      }
+    },
 
-      return new Response(JSON.stringify({ items }), {
-        headers: { ...cors, 'Content-Type': 'application/json' }
-      });
-
-    } catch(e) {
-      return new Response(JSON.stringify({ error: e.message, items: [] }), {
-        headers: { ...cors, 'Content-Type': 'application/json' }
-      });
+    copy: function(text, btn) {
+        navigator.clipboard.writeText(text).then(() => {
+            const original = btn.textContent;
+            btn.textContent = '✅ 복사됨!';
+            btn.style.background = '#f0fdf4';
+            setTimeout(() => { 
+                btn.textContent = original; 
+                btn.style.background = 'white';
+            }, 1500);
+        });
     }
-  }
-}
+};
+</script>
+
+</body>
+</html>
