@@ -38,7 +38,7 @@
     </div>
 
     <div class="search-box">
-        <input type="text" id="inp" placeholder="예: 안동 성소병원 또는 영주 가톨릭병원" onkeydown="if(event.key==='Enter') doSearch()">
+        <input type="text" id="inp" placeholder="예: 안동 성소병원 또는 강태영내과" onkeydown="if(event.key==='Enter') doSearch()">
         <button id="btn" onclick="doSearch()">조회</button>
     </div>
 
@@ -63,22 +63,41 @@ async function doSearch() {
     const div = document.getElementById('result');
 
     btn.disabled = true;
-    div.innerHTML = '<div style="text-align:center; color:#4f46e5; font-weight:600;">🔍 심평원 서버 연결 중...</div>';
+    div.innerHTML = '<div style="text-align:center; color:#4f46e5; font-weight:600;">🔍 심평원 서버에서 검색 중...</div>';
 
     try {
         let parts = raw.split(/\s+/);
         let sido = '';
+        let name = '';
         
+        // 첫 단어가 시도 리스트에 있는지 확인
+        let hasSido = false;
         for (const [k, v] of Object.entries(SIDO)) {
             if (parts[0] === k || parts[0].startsWith(k)) {
                 sido = v;
-                parts = parts.slice(1); // 💡 오타 수정 완료: 온전한 병원 이름만 남도록 갱신
+                hasSido = true;
                 break;
             }
         }
-        const name = parts.join(' ');
 
-        // 1단계: Cloudflare Worker를 통해 심평원 엔진 다이렉트 호출
+        // 시도명이 포함되어 있으면 첫 단어를 제외하고 병원 이름으로 조인, 없으면 전체를 병원 이름으로 사용
+        if (hasSido) {
+            name = parts.slice(1).join(' ');
+        } else {
+            name = parts.join(' ');
+        }
+
+        // 병원 이름이 비어있으면 검색 차단
+        if (!name) {
+            div.innerHTML = '<div class="error-msg">⚠️ 조회할 병원 이름을 정확히 입력해 주세요.</div>';
+            return;
+        }
+
+        // 1단계: Cloudflare Worker 호출
         const r1 = await fetch(`${WORKER}?q=${encodeURIComponent(name)}&sido=${encodeURIComponent(sido)}`);
         if (!r1.ok) {
-            div.innerHTML = '<div class="error-msg">❌ 서버 연결 실패. 잠시 후 다시 시도해 주세요.
+            div.innerHTML = '<div class="error-msg">❌ 서버 연결 실패. 잠시 후 다시 시도해 주세요.</div>';
+            return;
+        }
+
+        const j1 = await r1.json();
