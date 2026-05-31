@@ -46,86 +46,89 @@
 </div>
 
 <script>
-const WORKER = 'https://royal-field-b7e1.shrckdi1.workers.dev';
+// 전역 범위에서 충돌나지 않도록 객체로 묶어서 안전하게 선언합니다.
+window.HospApp = {
+    WORKER: 'https://royal-field-b7e1.shrckdi1.workers.dev',
+    
+    doSearch: async function() {
+        const name = document.getElementById('inp').value.trim();
+        if (!name) return;
 
-// html 상에서 onclick 지우고 안정적인 표준 이벤트 리스너 방식으로 버튼 활성화
-document.getElementById('btn').addEventListener('click', doSearch);
-document.getElementById('inp').addEventListener('keydown', function(e) {
+        const btn = document.getElementById('btn');
+        const div = document.getElementById('result');
+
+        btn.disabled = true;
+        div.innerHTML = '<div style="text-align:center; color:#4f46e5; font-weight:600;">🔍 심평원 서버에서 조회 중...</div>';
+
+        try {
+            const r1 = await fetch(this.WORKER + '?q=' + encodeURIComponent(name));
+            if (!r1.ok) {
+                div.innerHTML = '<div class="error-msg">❌ 서버 연결 실패. 잠시 후 다시 시도해 주세요.</div>';
+                return;
+            }
+
+            const j1 = await r1.json();
+            const list = j1.items || [];
+
+            if (list.length === 0) {
+                div.innerHTML = '<div class="error-msg">📭 검색 결과가 없습니다. 병원명을 짧게 입력해 보세요.</div>';
+                return;
+            }
+
+            let html = '';
+            
+            for (let i = 0; i < list.length; i++) {
+                if (i >= 5) break; 
+                const h = list[i];
+                let ykiho = '-';
+                
+                const r2 = await fetch(this.WORKER + '?ykiho=' + encodeURIComponent(h.ykiho));
+                if (r2.ok) {
+                    const j2 = await r2.json();
+                    ykiho = j2.ykiho || '-';
+                }
+
+                const addr = h.addr1 || '주소 정보 없음';
+
+                html += '<div class="card">';
+                html += '<div class="hosp-name">' + h.yadmNm + '</div>';
+                html += '<div class="hosp-addr">' + addr + '</div>';
+                html += '<div class="badge">요양기관기호</div>';
+                html += '<div class="ykiho-wrapper">';
+                html += '<div class="ykiho-num">' + ykiho + '</div>';
+                
+                if (ykiho !== '-') {
+                    // 전역 객체를 호출하도록 스코프 꼬임 방지
+                    html += '<button class="copy-btn" onclick="window.HospApp.copy(\'' + ykiho + '\', this)">📋 복사</button>';
+                }
+                
+                html += '</div>';
+                html += '</div>';
+            }
+            div.innerHTML = html;
+
+        } catch(e) {
+            div.innerHTML = '<div class="error-msg">⚠️ 시스템 오류: ' + e.message + '</div>';
+        } finally {
+            btn.disabled = false;
+        }
+    },
+
+    copy: function(text, btn) {
+        navigator.clipboard.writeText(text).then(function() {
+            btn.textContent = '✅ 복사됨!';
+            setTimeout(function() { btn.textContent = '📋 복사'; }, 1500);
+        });
+    }
+};
+
+// 페이지 로드 시 이벤트 바인딩도 전역 안정성이 검증된 방식으로 적용
+document.getElementById('btn').onclick = function() { window.HospApp.doSearch(); };
+document.getElementById('inp').onkeydown = function(e) {
     if (e.key === 'Enter') {
-        doSearch();
+        window.HospApp.doSearch();
     }
-});
-
-async function doSearch() {
-    const name = document.getElementById('inp').value.trim();
-    if (!name) return;
-
-    const btn = document.getElementById('btn');
-    const div = document.getElementById('result');
-
-    btn.disabled = true;
-    div.innerHTML = '<div style="text-align:center; color:#4f46e5; font-weight:600;">🔍 심평원 서버에서 조회 중...</div>';
-
-    try {
-        const r1 = await fetch(WORKER + '?q=' + encodeURIComponent(name));
-        if (!r1.ok) {
-            div.innerHTML = '<div class="error-msg">❌ 서버 연결 실패. 잠시 후 다시 시도해 주세요.</div>';
-            return;
-        }
-
-        const j1 = await r1.json();
-        const list = j1.items || [];
-
-        if (list.length === 0) {
-            div.innerHTML = '<div class="error-msg">📭 검색 결과가 없습니다. 병원명을 짧게 입력해 보세요.</div>';
-            return;
-        }
-
-        let html = '';
-        
-        for (let i = 0; i < list.length; i++) {
-            if (i >= 5) break; 
-            const h = list[i];
-            let ykiho = '-';
-            
-            const r2 = await fetch(WORKER + '?ykiho=' + encodeURIComponent(h.ykiho));
-            if (r2.ok) {
-                const j2 = await r2.json();
-                ykiho = j2.ykiho || '-';
-            }
-
-            const addr = h.addr1 || '주소 정보 없음';
-
-            // 오류 가능성 제로인 순수 문자열 결합 방식으로 전면 변경
-            html += '<div class="card">';
-            html += '<div class="hosp-name">' + h.yadmNm + '</div>';
-            html += '<div class="hosp-addr">' + addr + '</div>';
-            html += '<div class="badge">요양기관기호</div>';
-            html += '<div class="ykiho-wrapper">';
-            html += '<div class="ykiho-num">' + ykiho + '</div>';
-            
-            if (ykiho !== '-') {
-                html += '<button class="copy-btn" onclick="copy(\'' + ykiho + '\', this)">📋 복사</button>';
-            }
-            
-            html += '</div>';
-            html += '</div>';
-        }
-        div.innerHTML = html;
-
-    } catch(e) {
-        div.innerHTML = '<div class="error-msg">⚠️ 시스템 오류: ' + e.message + '</div>';
-    } finally {
-        btn.disabled = false;
-    }
-}
-
-function copy(text, btn) {
-    navigator.clipboard.writeText(text).then(function() {
-        btn.textContent = '✅ 복사됨!';
-        setTimeout(function() { btn.textContent = '📋 복사'; }, 1500);
-    });
-}
+};
 </script>
 
 </body>
