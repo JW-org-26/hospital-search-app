@@ -38,6 +38,95 @@
     </div>
 
     <div class="search-box">
-        <input type="text" id="inp" placeholder="예: 안동 성소병원 또는 강태영내과" onkeydown="if(event.key==='Enter') doSearch()">
-        <button id="btn" onclick="doSearch()">조회</button>
+        <input type="text" id="inp" placeholder="예: 안동 성소병원 또는 강태영내과">
+        <button id="btn">조회</button>
     </div>
+
+    <div id="result"></div>
+</div>
+
+<script>
+const WORKER = 'https://royal-field-b7e1.shrckdi1.workers.dev';
+
+// html 상에서 onclick 지우고 안정적인 표준 이벤트 리스너 방식으로 버튼 활성화
+document.getElementById('btn').addEventListener('click', doSearch);
+document.getElementById('inp').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+        doSearch();
+    }
+});
+
+async function doSearch() {
+    const name = document.getElementById('inp').value.trim();
+    if (!name) return;
+
+    const btn = document.getElementById('btn');
+    const div = document.getElementById('result');
+
+    btn.disabled = true;
+    div.innerHTML = '<div style="text-align:center; color:#4f46e5; font-weight:600;">🔍 심평원 서버에서 조회 중...</div>';
+
+    try {
+        const r1 = await fetch(WORKER + '?q=' + encodeURIComponent(name));
+        if (!r1.ok) {
+            div.innerHTML = '<div class="error-msg">❌ 서버 연결 실패. 잠시 후 다시 시도해 주세요.</div>';
+            return;
+        }
+
+        const j1 = await r1.json();
+        const list = j1.items || [];
+
+        if (list.length === 0) {
+            div.innerHTML = '<div class="error-msg">📭 검색 결과가 없습니다. 병원명을 짧게 입력해 보세요.</div>';
+            return;
+        }
+
+        let html = '';
+        
+        for (let i = 0; i < list.length; i++) {
+            if (i >= 5) break; 
+            const h = list[i];
+            let ykiho = '-';
+            
+            const r2 = await fetch(WORKER + '?ykiho=' + encodeURIComponent(h.ykiho));
+            if (r2.ok) {
+                const j2 = await r2.json();
+                ykiho = j2.ykiho || '-';
+            }
+
+            const addr = h.addr1 || '주소 정보 없음';
+
+            // 오류 가능성 제로인 순수 문자열 결합 방식으로 전면 변경
+            html += '<div class="card">';
+            html += '<div class="hosp-name">' + h.yadmNm + '</div>';
+            html += '<div class="hosp-addr">' + addr + '</div>';
+            html += '<div class="badge">요양기관기호</div>';
+            html += '<div class="ykiho-wrapper">';
+            html += '<div class="ykiho-num">' + ykiho + '</div>';
+            
+            if (ykiho !== '-') {
+                html += '<button class="copy-btn" onclick="copy(\'' + ykiho + '\', this)">📋 복사</button>';
+            }
+            
+            html += '</div>';
+            html += '</div>';
+        }
+        div.innerHTML = html;
+
+    } catch(e) {
+        div.innerHTML = '<div class="error-msg">⚠️ 시스템 오류: ' + e.message + '</div>';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+function copy(text, btn) {
+    navigator.clipboard.writeText(text).then(function() {
+        btn.textContent = '✅ 복사됨!';
+        setTimeout(function() { btn.textContent = '📋 복사'; }, 1500);
+    });
+}
+</script>
+
+</body>
+</html>
