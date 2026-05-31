@@ -28,7 +28,7 @@ button:disabled { background: #a5b4fc; }
 .copy-btn { margin-top: 10px; padding: 7px 14px; background: #f0f0ff;
             color: #4f46e5; border: 1px solid #c7d2fe; border-radius: 8px;
             font-size: 13px; cursor: pointer; font-weight: 600; }
-.msg { text-align: center; color: #888; font-size: 14px; padding: 30px; }
+.msg { text-align: center; color: #888; font-size: 14px; padding: 30px; line-height: 1.8; }
 </style>
 </head>
 <body>
@@ -42,30 +42,27 @@ button:disabled { background: #a5b4fc; }
   </div>
   <div id="result"></div>
 </div>
- 
+
 <script>
+const WORKER = 'https://royal-field-b7e1.shrckdi1.workers.dev';
 const SIDO = {
   서울:'110000',부산:'210000',대구:'220000',인천:'230000',
   광주:'240000',대전:'250000',울산:'260000',세종:'290000',
   경기:'410000',강원:'420000',충북:'430000',충남:'440000',
   전북:'450000',전남:'460000',경북:'470000',경남:'480000',제주:'500000'
 };
- 
-// 캐시 완전 방지: 쿼리스트링에 랜덤값 포함한 GET 방식으로 변환
-async function hiraGet(endpoint, params) {
-  params._ts = Date.now() + '_' + Math.random().toString(36).slice(2,8);
-  const qs = Object.entries(params).map(([k,v])=>encodeURIComponent(k)+'='+encodeURIComponent(v)).join('&');
-  const targetUrl = 'https://www.hira.or.kr/ra/hosp' + endpoint + '?' + qs;
-  // corsproxy.io: URL마다 다른 캐시키 → 캐시 우회
-  const res = await fetch('https://corsproxy.io/?' + encodeURIComponent(targetUrl), {
-    method: 'GET',
-    headers: { 'X-Requested-With': 'XMLHttpRequest' },
-    cache: 'no-store'
+
+async function hiraPost(path, bodyStr) {
+  const res = await fetch(WORKER + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+               'X-Requested-With': 'XMLHttpRequest' },
+    body: bodyStr
   });
   if (!res.ok) throw new Error('오류 ' + res.status);
   return res;
 }
- 
+
 async function doSearch() {
   const raw = document.getElementById('inp').value.trim();
   if (!raw) return;
@@ -73,7 +70,7 @@ async function doSearch() {
   const div = document.getElementById('result');
   btn.disabled = true;
   div.innerHTML = '<div class="msg">🔍 조회 중...</div>';
- 
+
   try {
     let parts = raw.split(/\s+/);
     let sido = '';
@@ -83,24 +80,20 @@ async function doSearch() {
       }
     }
     const name = parts.join(' ');
- 
-    // 1단계: 병원 검색 (GET)
-    const r1 = await hiraGet('/selectHospSrchDtnListAjax.do', {
-      pageIndex:'1', numOfRows:'10', yadmNm: name,
-      sidoCd: sido, sgguCd:'', srchMode:'NM', mode:'01'
-    });
+
+    const r1 = await hiraPost('/selectHospSrchDtnListAjax.do',
+      `pageIndex=1&numOfRows=10&yadmNm=${encodeURIComponent(name)}&sidoCd=${sido}&sgguCd=&srchMode=NM&mode=01`);
     const j1 = await r1.json();
     const list = j1.data?.hospList || [];
- 
+
     if (!list.length) {
-      div.innerHTML = '<div class="msg">검색 결과 없음.<br>병원명 짧게 줄여서 다시 검색해보세요.</div>';
+      div.innerHTML = '<div class="msg">검색 결과 없음<br>병원명을 짧게 줄여보세요</div>';
       return;
     }
- 
-    // 2단계: 각 병원 상세 조회 (GET)
+
     let html = '';
     for (const h of list.slice(0, 5)) {
-      const r2 = await hiraGet('/hospInfoAjax.do', { ykiho: h.ykiho });
+      const r2 = await hiraPost('/hospInfoAjax.do', `ykiho=${encodeURIComponent(h.ykiho)}`);
       const text = await r2.text();
       const m = text.match(/name=.ykiho.[^>]*value=.(\d{8})/) ||
                 text.match(/value=.(\d{8}).[^>]*name=.ykiho/);
@@ -120,7 +113,7 @@ async function doSearch() {
     btn.disabled = false;
   }
 }
- 
+
 function copy(text, btn) {
   navigator.clipboard.writeText(text).then(() => {
     btn.textContent = '✅ 복사됨!';
