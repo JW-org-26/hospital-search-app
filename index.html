@@ -44,14 +44,12 @@ button:disabled { background: #a5b4fc; }
 </div>
 
 <script>
-const KEY = '129d37b913a701e7a6a65f82f1564e73290e34ea583bdfd4c948a21c7f4cc866';
-const API = 'https://apis.data.go.kr/B551182/hospInfoServicev2/getHospBasisList';
-
+const WORKER = 'https://royal-field-b7e1.shrckdi1.workers.dev';
 const SIDO = {
-  서울:'서울특별시', 부산:'부산광역시', 대구:'대구광역시', 인천:'인천광역시',
-  광주:'광주광역시', 대전:'대전광역시', 울산:'울산광역시', 세종:'세종특별자치시',
-  경기:'경기도', 강원:'강원특별자치도', 충북:'충청북도', 충남:'충청남도',
-  전북:'전북특별자치도', 전남:'전라남도', 경북:'경상북도', 경남:'경상남도', 제주:'제주특별자치도'
+  서울:'서울특별시',부산:'부산광역시',대구:'대구광역시',인천:'인천광역시',
+  광주:'광주광역시',대전:'대전광역시',울산:'울산광역시',세종:'세종특별자치시',
+  경기:'경기도',강원:'강원특별자치도',충북:'충청북도',충남:'충청남도',
+  전북:'전북특별자치도',전남:'전라남도',경북:'경상북도',경남:'경상남도',제주:'제주특별자치도'
 };
 
 async function doSearch() {
@@ -64,37 +62,33 @@ async function doSearch() {
 
   try {
     let parts = raw.split(/\s+/);
-    let sidoNm = '';
+    let sido = '';
     for (const [k, v] of Object.entries(SIDO)) {
       if (parts[0] === k || parts[0].startsWith(k)) {
-        sidoNm = v; parts = parts.slice(1); break;
+        sido = v; parts = parts.slice(1); break;
       }
     }
     const name = parts.join(' ');
 
-    const params = new URLSearchParams({
-      ServiceKey: KEY,
-      yadmNm: name,
-      numOfRows: '10',
-      pageNo: '1',
-      _type: 'json'
-    });
-    if (sidoNm) params.append('sidoCdNm', sidoNm);
+    // 1단계: 병원 검색
+    const r1 = await fetch(`${WORKER}?q=${encodeURIComponent(name)}&sido=${encodeURIComponent(sido)}`);
+    const j1 = await r1.json();
+    const items = j1?.response?.body?.items?.item || [];
+    const list = Array.isArray(items) ? items : (items ? [items] : []);
 
-    const r = await fetch(`${API}?${params}`);
-    const j = await r.json();
-    const items = j?.response?.body?.items?.item || [];
-    const list = Array.isArray(items) ? items : [items];
-
-    if (!list.length || !list[0]) {
+    if (!list.length) {
       div.innerHTML = '<div class="msg">검색 결과 없음<br>병원명을 짧게 줄여보세요</div>';
       return;
     }
 
+    // 2단계: ykiho 디코딩
     let html = '';
     for (const h of list.slice(0, 5)) {
-      const ykiho = h.ykiho || '-';
-      const addr = [h.addr1, h.addr2].filter(Boolean).join(' ') || h.addr || '';
+      const r2 = await fetch(`${WORKER}?ykiho=${encodeURIComponent(h.ykiho)}`);
+      const j2 = await r2.json();
+      const ykiho = j2.ykiho || '-';
+      const addr = h.addr1 || '';
+
       html += `<div class="card">
         <div class="hosp-name">${h.yadmNm}</div>
         <div class="hosp-addr">${addr}</div>
