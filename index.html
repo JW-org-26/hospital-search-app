@@ -66,7 +66,12 @@
             const r1 = await fetch(url);
             const j1 = await r1.json();
             const items = j1?.response?.body?.items?.item || [];
-            const list = Array.isArray(items) ? items : (items ? [items] : []);
+            let list = Array.isArray(items) ? items : (items ? [items] : []);
+            // 검색어와 관련없는 결과 필터링
+            const keyword = name.replace(/[의원병원클리닉]/g,'').trim();
+            if (keyword.length >= 2) {
+              list = list.filter(h => h.yadmNm && h.yadmNm.includes(keyword));
+            }
 
             if (!list.length) {
                 div.innerHTML = '<div class="msg">검색 결과 없음<br>병원명을 짧게 줄여보세요</div>';
