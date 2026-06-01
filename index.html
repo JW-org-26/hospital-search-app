@@ -61,7 +61,7 @@
             const name = parts.join(' ');
 
             // 1단계: data.go.kr 직접 호출 (CORS 지원)
-            let url = `https://apis.data.go.kr/B551182/hospInfoServicev2/getHospBasisList?ServiceKey=${API_KEY}&yadmNm=${encodeURIComponent(name)}&numOfRows=5&pageNo=1&_type=json`;
+            let url = `https://apis.data.go.kr/B551182/hospInfoServicev2/getHospBasisList?ServiceKey=${API_KEY}&yadmNm=${encodeURIComponent(name)}&numOfRows=20&pageNo=1&_type=json`;
             if (sido) url += `&sidoCdNm=${encodeURIComponent(sido)}`;
             const r1 = await fetch(url);
             const j1 = await r1.json();
@@ -79,7 +79,7 @@
             }
 
             // 2단계: Worker로 ykiho 병렬 디코딩
-            const results = await Promise.all(list.slice(0,5).map(async h => {
+            const results = await Promise.all(list.slice(0,20).map(async h => {
                 const r2 = await fetch(`${WORKER}/?ykiho=${encodeURIComponent(h.ykiho)}`);
                 const j2 = await r2.json();
                 return { name: h.yadmNm, addr: h.addr||h.addr1||'', ykiho: j2.ykiho||null };
