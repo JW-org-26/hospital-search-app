@@ -1,113 +1,61 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>요양기관기호 조회</title>
-    <style>
-        body { font-family: sans-serif; text-align: center; padding: 40px 20px; background: #f0f4f8; }
-        h2 { color: #1a1a2e; }
-        .search-box { margin: 20px 0; }
-        input { padding: 12px; width: 260px; font-size: 16px; border: 2px solid #ddd; border-radius: 8px; }
-        button { padding: 12px 18px; font-size: 16px; background: #4f46e5; color: #fff; border: none; border-radius: 8px; cursor: pointer; margin-left: 6px; }
-        button:disabled { background: #a5b4fc; }
-        #result { margin-top: 24px; }
-        .card { background: #fff; border-radius: 12px; padding: 20px; margin: 10px auto; max-width: 400px; box-shadow: 0 2px 8px rgba(0,0,0,.1); }
-        .hosp-name { font-size: 16px; font-weight: bold; color: #333; margin-bottom: 8px; }
-        .hosp-addr { font-size: 12px; color: #999; margin-bottom: 14px; }
-        .label { font-size: 11px; color: #4f46e5; font-weight: bold; letter-spacing: 1px; }
-        .ykiho { font-size: 34px; font-weight: 900; letter-spacing: 4px; color: #1a1a2e; font-family: monospace; margin: 4px 0 10px; }
-        .copy-btn { padding: 6px 14px; background: #e0e7ff; color: #4f46e5; border: 1px solid #c7d2fe; border-radius: 6px; cursor: pointer; font-size: 13px; }
-        .msg { color: #888; margin-top: 20px; }
-    </style>
-</head>
-<body>
-    <h2>🏥 요양기관기호 조회</h2>
-    <p style="color:#888;font-size:13px">병원명 입력 → 8자리 기호 즉시 조회</p>
-    <div class="search-box">
-        <input type="text" id="inp" placeholder="병원명 입력"
-               onkeydown="if(event.key==='Enter')doSearch()">
-        <button id="btn" onclick="doSearch()">조회</button>
-    </div>
-    <div id="result"></div>
-
-    <script>
-    const WORKER = 'https://royal-field-b7e1.shrckdi1.workers.dev';
-    const API_KEY = '129d37b913a701e7a6a65f82f1564e73290e34ea583bdfd4c948a21c7f4cc866';
-    const SIDO = {
-      서울:'서울특별시',부산:'부산광역시',대구:'대구광역시',인천:'인천광역시',
-      광주:'광주광역시',대전:'대전광역시',울산:'울산광역시',세종:'세종특별자치시',
-      경기:'경기도',강원:'강원특별자치도',충북:'충청북도',충남:'충청남도',
-      전북:'전북특별자치도',전남:'전라남도',경북:'경상북도',경남:'경상남도',제주:'제주특별자치도'
-    };
-
-    async function doSearch() {
-        const raw = document.getElementById('inp').value.trim();
-        if (!raw) return;
-        const btn = document.getElementById('btn');
-        const div = document.getElementById('result');
-        btn.disabled = true;
-        div.innerHTML = '<div class="msg">🔍 조회 중...</div>';
-
-        try {
-            // 지역 파싱
-            let parts = raw.split(/\s+/);
-            let sido = '';
-            for (const [k, v] of Object.entries(SIDO)) {
-                if (parts[0] === k || parts[0].startsWith(k)) {
-                    sido = v; parts = parts.slice(1); break;
-                }
+async function doSearch() {
+    const raw = document.getElementById('inp').value.trim();
+    if (!raw) return;
+    const btn = document.getElementById('btn');
+    const div = document.getElementById('result');
+    btn.disabled = true;
+    div.innerHTML = '<div class="msg">🔍 조회 중...</div>';
+    try {
+        let parts = raw.split(/\s+/);
+        let sido = '';
+        for (const [k, v] of Object.entries(SIDO)) {
+            if (parts[0] === k || parts[0].startsWith(k)) {
+                sido = v; parts = parts.slice(1); break;
             }
-            const name = parts.join(' ');
+        }
+        const name = parts.join(' ');
 
-            // 1단계: data.go.kr 직접 호출 (CORS 지원)
-            let url = `https://apis.data.go.kr/B551182/hospInfoServicev2/getHospBasisList?ServiceKey=${API_KEY}&yadmNm=${encodeURIComponent(name)}&numOfRows=20&pageNo=1&_type=json`;
+        // 검색어를 점진적으로 줄여가며 결과가 나올 때까지 시도
+        let list = [];
+        let searchName = name;
+        while (searchName.length >= 2 && list.length === 0) {
+            let url = `https://apis.data.go.kr/B551182/hospInfoServicev2/getHospBasisList?ServiceKey=${API_KEY}&yadmNm=${encodeURIComponent(searchName)}&numOfRows=50&pageNo=1&_type=json`;
             if (sido) url += `&sidoCdNm=${encodeURIComponent(sido)}`;
             const r1 = await fetch(url);
             const j1 = await r1.json();
             const items = j1?.response?.body?.items?.item || [];
-            let list = Array.isArray(items) ? items : (items ? [items] : []);
-            // 검색어와 관련없는 결과 필터링
-            const keyword = name.replace(/[의원병원클리닉]/g,'').trim();
-            if (keyword.length >= 2) {
-              list = list.filter(h => h.yadmNm && h.yadmNm.includes(keyword));
-            }
-
-            if (!list.length) {
-                div.innerHTML = '<div class="msg">검색 결과 없음<br>병원명을 짧게 줄여보세요</div>';
-                return;
-            }
-
-            // 2단계: Worker로 ykiho 병렬 디코딩
-            const results = await Promise.all(list.slice(0,20).map(async h => {
-                const r2 = await fetch(`${WORKER}/?ykiho=${encodeURIComponent(h.ykiho)}`);
-                const j2 = await r2.json();
-                return { name: h.yadmNm, addr: h.addr||h.addr1||'', ykiho: j2.ykiho||null };
-            }));
-
-            div.innerHTML = results.map(h => `
-                <div class="card">
-                    <div class="hosp-name">${h.name}</div>
-                    <div class="hosp-addr">${h.addr}</div>
-                    <div class="label">요양기관기호</div>
-                    <div class="ykiho">${h.ykiho || '-'}</div>
-                    ${h.ykiho ? `<button class="copy-btn" onclick="copyText('${h.ykiho}',this)">📋 복사</button>` : ''}
-                </div>
-            `).join('');
-
-        } catch(e) {
-            div.innerHTML = `<div class="msg">오류: ${e.message}</div>`;
-        } finally {
-            btn.disabled = false;
+            let raw_list = Array.isArray(items) ? items : (items ? [items] : []);
+            
+            // 원래 검색어 포함하는 것만 필터 (완화: 원본 name 기준)
+            list = raw_list.filter(h => h.yadmNm && h.yadmNm.includes(name));
+            
+            // 결과 없으면 검색어 1글자 줄이기
+            if (list.length === 0) searchName = searchName.slice(0, -1);
         }
-    }
 
-    function copyText(text, btn) {
-        navigator.clipboard.writeText(text).then(() => {
-            btn.textContent = '✅ 복사됨!';
-            setTimeout(() => btn.textContent = '📋 복사', 1500);
-        });
+        if (!list.length) {
+            div.innerHTML = '<div class="msg">검색 결과 없음<br>병원명을 짧게 줄여보세요</div>';
+            return;
+        }
+
+        const results = await Promise.all(list.slice(0, 20).map(async h => {
+            const r2 = await fetch(`${WORKER}/?ykiho=${encodeURIComponent(h.ykiho)}`);
+            const j2 = await r2.json();
+            return { name: h.yadmNm, addr: h.addr || h.addr1 || '', ykiho: j2.ykiho || null };
+        }));
+
+        div.innerHTML = results.map(h => `
+            <div class="card">
+                <div class="hosp-name">${h.name}</div>
+                <div class="hosp-addr">${h.addr}</div>
+                <div class="label">요양기관기호</div>
+                <div class="ykiho">${h.ykiho || '-'}</div>
+                ${h.ykiho ? `<button class="copy-btn" onclick="copyText('${h.ykiho}',this)">📋 복사</button>` : ''}
+            </div>
+        `).join('');
+    } catch(e) {
+        div.innerHTML = `<div class="msg">오류: ${e.message}</div>`;
+    } finally {
+        btn.disabled = false;
     }
-    </script>
-</body>
-</html>
+}
