@@ -6,102 +6,99 @@
     <title>요양기관기호 조회</title>
     <style>
         body { font-family: sans-serif; text-align: center; padding: 40px 20px; background: #f0f4f8; }
-        h2 { color: #1a1a2e; }
         .search-box { margin: 20px 0; }
-        input { padding: 12px; width: 260px; font-size: 16px; border: 2px solid #ddd; border-radius: 8px; }
-        button { padding: 12px 18px; font-size: 16px; background: #4f46e5; color: #fff; border: none; border-radius: 8px; cursor: pointer; margin-left: 6px; }
+        input { padding: 12px; width: 280px; font-size: 16px; border: 2px solid #ddd; border-radius: 8px; }
+        button { padding: 12px 18px; background: #4f46e5; color: #fff; border: none; border-radius: 8px; cursor: pointer; }
         button:disabled { background: #a5b4fc; }
-        #result { margin-top: 24px; }
-        .card { background: #fff; border-radius: 12px; padding: 20px; margin: 10px auto; max-width: 400px; box-shadow: 0 2px 8px rgba(0,0,0,.1); }
-        .hosp-name { font-size: 16px; font-weight: bold; color: #333; margin-bottom: 8px; }
-        .hosp-addr { font-size: 12px; color: #999; margin-bottom: 14px; }
-        .label { font-size: 11px; color: #4f46e5; font-weight: bold; letter-spacing: 1px; }
-        .ykiho { font-size: 34px; font-weight: 900; letter-spacing: 4px; color: #1a1a2e; font-family: monospace; margin: 4px 0 10px; }
+        .card { background: #fff; border-radius: 12px; padding: 20px; margin: 10px auto; max-width: 400px; box-shadow: 0 2px 8px rgba(0,0,0,.1); text-align: left; }
+        .hosp-name { font-weight: bold; font-size: 16px; }
+        .hosp-addr { font-size: 12px; color: #666; margin: 5px 0; }
+        .ykiho { font-size: 24px; font-weight: 900; color: #4f46e5; margin: 8px 0; }
         .copy-btn { padding: 6px 14px; background: #e0e7ff; color: #4f46e5; border: 1px solid #c7d2fe; border-radius: 6px; cursor: pointer; font-size: 13px; }
         .msg { color: #888; margin-top: 20px; }
-        .warn { color: #e05; margin-top: 20px; font-size: 14px; }
+        .warn { color: #e00055; margin-top: 20px; font-size: 14px; }
     </style>
 </head>
 <body>
     <h2>🏥 요양기관기호 조회</h2>
-    <p style="color:#888;font-size:13px">병원명 입력 → 8자리 기호 즉시 조회</p>
+    <p style="color:#888;font-size:13px">예) 연세의원 → 남양주 연세의원</p>
     <div class="search-box">
-        <input type="text" id="inp" placeholder="병원명 입력"
+        <input type="text" id="inp" placeholder="예: 남양주 연세의원"
                onkeydown="if(event.key==='Enter')doSearch()">
         <button id="btn" onclick="doSearch()">조회</button>
     </div>
     <div id="result"></div>
     <script>
-    const WORKER = 'https://royal-field-b7e1.shrckdi1.workers.dev';
-    const STOP_WORDS = ['의원','병원','클리닉','내과','외과','치과','한의원','약국','서울','부산','대구','인천','광주','대전','울산','경기','강원','제주'];
+        const WORKER = 'https://royal-field-b7e1.shrckdi1.workers.dev';
+        const STOP_WORDS = ['의원','병원','클리닉','내과','외과','치과','한의원','약국','서울','부산','대구','인천','광주','대전','울산','경기','강원','제주'];
 
-    async function doSearch() {
-        const raw = document.getElementById('inp').value.trim();
-        if (!raw) return;
-        const btn = document.getElementById('btn');
-        const div = document.getElementById('result');
-        btn.disabled = true;
+        async function doSearch() {
+            const raw = document.getElementById('inp').value.trim();
+            if (!raw) return;
+            const btn = document.getElementById('btn');
+            const div = document.getElementById('result');
+            btn.disabled = true;
 
-        const name = raw.replace(/\s+/g, '');
+            const parts = raw.split(/\s+/);
+            const area = parts.length > 1 ? parts[0] : '';
+            const hospitalName = parts.length > 1 ? parts.slice(1).join('') : raw.replace(/\s+/g, '');
 
-        if (name.length <= 2 || STOP_WORDS.includes(name)) {
-            div.innerHTML = '<div class="warn">⚠️ 병원 전체명을 입력해주세요<br><span style="color:#aaa;font-size:12px">예) 서울숲내과의원, 강태영내과, 서울드림이비인후과</span></div>';
-            btn.disabled = false;
-            return;
-        }
-
-        div.innerHTML = '<div class="msg">🔍 조회 중...</div>';
-        try {
-            let list = await searchHira(name);
-
-            // 결과 없으면 끝 단어 제거 후 재검색
-            if (!list.length) {
-                const keyword = name.replace(/(내과|외과|의원|병원|정형외과|이비인후과|치과|한의원|클리닉)$/, '');
-                if (keyword.length >= 2) list = await searchHira(keyword);
-            }
-
-            if (!list.length) {
-                div.innerHTML = '<div class="msg">검색 결과 없음<br>병원명을 더 정확하게 입력해보세요</div>';
+            if (hospitalName.length <= 2 || STOP_WORDS.includes(hospitalName)) {
+                div.innerHTML = '<div class="warn">⚠️ 병원 전체명을 입력해주세요<br><span style="color:#aaa;font-size:12px">예) 서울숲내과의원, 강태영내과, 남양주 연세의원</span></div>';
+                btn.disabled = false;
                 return;
             }
 
-            const results = await Promise.all(list.slice(0, 20).map(async h => {
-                const r2 = await fetch(`${WORKER}/?ykiho=${encodeURIComponent(h.ykiho)}`);
-                const j2 = await r2.json();
-                return { name: h.yadmNm, addr: h.addr || h.addr1 || '', ykiho: j2.ykiho || null };
-            }));
-
-            div.innerHTML = results.map(h => `
-                <div class="card">
-                    <div class="hosp-name">${h.name}</div>
-                    <div class="hosp-addr">${h.addr}</div>
-                    <div class="label">요양기관기호</div>
-                    <div class="ykiho">${h.ykiho || '-'}</div>
-                    ${h.ykiho ? `<button class="copy-btn" onclick="copyText('${h.ykiho}',this)">📋 복사</button>` : ''}
-                </div>
-            `).join('');
-        } catch(e) {
-            div.innerHTML = `<div class="msg">오류: ${e.message}</div>`;
-        } finally {
-            btn.disabled = false;
+            div.innerHTML = '<div class="msg">🔍 검색 중...</div>';
+            try {
+                let list = await searchHira(hospitalName);
+                if (!list.length) {
+                    const keyword = hospitalName.replace(/(내과|외과|의원|병원|정형외과|이비인후과|치과|한의원|클리닉)$/, '');
+                    if (keyword.length >= 2) list = await searchHira(keyword);
+                }
+                if (area && list.length > 0) {
+                    const filtered = list.filter(h => h.addr && h.addr.includes(area));
+                    if (filtered.length > 0) list = filtered;
+                }
+                if (!list.length) {
+                    div.innerHTML = '<div class="msg">검색 결과가 없습니다.</div>';
+                    return;
+                }
+                const results = await Promise.all(list.slice(0, 10).map(async h => {
+                    const r2 = await fetch(`${WORKER}/?ykiho=${encodeURIComponent(h.ykiho)}`);
+                    const j2 = await r2.json();
+                    return { name: h.yadmNm, addr: h.addr, ykiho: j2.ykiho };
+                }));
+                div.innerHTML = results.map(h => `
+                    <div class="card">
+                        <div class="hosp-name">${h.name}</div>
+                        <div class="hosp-addr">${h.addr}</div>
+                        <div class="ykiho">${h.ykiho || '기호 없음'}</div>
+                        ${h.ykiho ? `<button class="copy-btn" onclick="copyText('${h.ykiho}',this)">📋 복사</button>` : ''}
+                    </div>
+                `).join('');
+            } catch(e) {
+                div.innerHTML = `<div class="msg">오류: ${e.message}</div>`;
+            } finally {
+                btn.disabled = false;
+            }
         }
-    }
 
-    async function searchHira(name) {
-        try {
-            const r = await fetch(`${WORKER}/?search=${encodeURIComponent(name)}`);
-            const j = await r.json();
-            const items = j?.response?.body?.items?.item || j?.items || [];
-            return Array.isArray(items) ? items : (items ? [items] : []);
-        } catch(e) { return []; }
-    }
+        async function searchHira(name) {
+            try {
+                const r = await fetch(`${WORKER}/?search=${encodeURIComponent(name)}`);
+                const j = await r.json();
+                const items = j?.response?.body?.items?.item || j?.items || [];
+                return Array.isArray(items) ? items : (items ? [items] : []);
+            } catch(e) { return []; }
+        }
 
-    function copyText(text, btn) {
-        navigator.clipboard.writeText(text).then(() => {
-            btn.textContent = '✅ 복사됨!';
-            setTimeout(() => btn.textContent = '📋 복사', 1500);
-        });
-    }
+        function copyText(text, btn) {
+            navigator.clipboard.writeText(text).then(() => {
+                btn.textContent = '✅ 복사됨!';
+                setTimeout(() => btn.textContent = '📋 복사', 1500);
+            });
+        }
     </script>
 </body>
 </html>
