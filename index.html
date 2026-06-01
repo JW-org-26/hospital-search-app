@@ -2,52 +2,57 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>요양기관기호 조회</title>
     <style>
-        body { font-family: sans-serif; text-align: center; padding: 50px; }
-        input { padding: 10px; width: 300px; }
-        button { padding: 10px; cursor: pointer; }
-        #result { margin-top: 20px; font-weight: bold; }
+        body { font-family: sans-serif; text-align: center; padding: 50px 20px; }
+        input { padding: 10px; width: 280px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; }
+        button { padding: 10px 16px; cursor: pointer; font-size: 16px; background: #4f46e5; color: #fff; border: none; border-radius: 6px; margin-left: 6px; }
+        #result { margin-top: 30px; font-size: 18px; }
+        .ykiho { font-size: 36px; font-weight: bold; letter-spacing: 4px; color: #1a1a2e; font-family: monospace; margin: 10px 0; }
+        .copy-btn { padding: 6px 14px; background: #e0e7ff; color: #4f46e5; border: 1px solid #c7d2fe; border-radius: 6px; cursor: pointer; font-size: 13px; }
     </style>
 </head>
 <body>
-
     <h2>🏥 요양기관기호 조회</h2>
-    <p>병원명 입력 → 8자리 기호 즉시 조회</p>
-
-    <input type="text" id="hospitalInput" placeholder="병원명을 입력하세요">
+    <p>병원 정확한 이름 입력 → 8자리 기호 즉시 조회</p>
+    <input type="text" id="hospitalInput" placeholder="예: 은준영내과의원"
+           onkeydown="if(event.key==='Enter')searchHospital()">
     <button onclick="searchHospital()">조회</button>
-
     <div id="result"></div>
 
     <script>
-        // 🔥 여기에 회원님의 실제 Worker 주소를 넣으세요 (예: https://my-worker.subdomain.workers.dev)
-        const WORKER_URL = "https://[본인의-워커-주소].workers.dev";
+        const WORKER_URL = "https://royal-field-b7e1.shrckdi1.workers.dev";
 
         async function searchHospital() {
-            const input = document.getElementById('hospitalInput').value;
+            const input = document.getElementById('hospitalInput').value.trim();
             const resultDiv = document.getElementById('result');
-            
-            if (!input) {
-                alert("병원명을 입력해주세요.");
-                return;
-            }
+            if (!input) { alert("병원명을 입력해주세요."); return; }
 
-            resultDiv.innerText = "조회 중...";
-
+            resultDiv.innerHTML = "🔍 조회 중...";
             try {
                 const response = await fetch(`${WORKER_URL}/?q=${encodeURIComponent(input)}`);
                 const data = await response.json();
 
-                if (data.items && data.items.length > 0) {
-                    const hospital = data.items[0];
-                    resultDiv.innerHTML = `검색 결과: ${hospital.yadmNm} <br> 요양기관기호: ${hospital.ykiho}`;
+                if (data.ykiho) {
+                    resultDiv.innerHTML = `
+                        <p>${data.yadmNm || input}</p>
+                        <div class="ykiho">${data.ykiho}</div>
+                        <button class="copy-btn" onclick="copyText('${data.ykiho}', this)">📋 복사</button>
+                    `;
                 } else {
-                    resultDiv.innerText = "해당 병원을 찾을 수 없습니다.";
+                    resultDiv.innerHTML = "해당 병원을 찾을 수 없습니다.<br>정확한 병원명으로 다시 검색해보세요.";
                 }
-            } catch (e) {
-                resultDiv.innerText = "오류가 발생했습니다. Worker 주소를 확인하세요.";
+            } catch(e) {
+                resultDiv.innerHTML = "오류가 발생했습니다.";
             }
+        }
+
+        function copyText(text, btn) {
+            navigator.clipboard.writeText(text).then(() => {
+                btn.textContent = '✅ 복사됨!';
+                setTimeout(() => btn.textContent = '📋 복사', 1500);
+            });
         }
     </script>
 </body>
