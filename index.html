@@ -33,13 +33,6 @@
     <div id="result"></div>
     <script>
     const WORKER = 'https://royal-field-b7e1.shrckdi1.workers.dev';
-    const API_KEY = '129d37b913a701e7a6a65f82f1564e73290e34ea583bdfd4c948a21c7f4cc866';
-    const SIDO = {
-      서울:'서울특별시',부산:'부산광역시',대구:'대구광역시',인천:'인천광역시',
-      광주:'광주광역시',대전:'대전광역시',울산:'울산광역시',세종:'세종특별자치시',
-      경기:'경기도',강원:'강원특별자치도',충북:'충청북도',충남:'충청남도',
-      전북:'전북특별자치도',전남:'전라남도',경북:'경상북도',경남:'경상남도',제주:'제주특별자치도'
-    };
     const STOP_WORDS = ['의원','병원','클리닉','내과','외과','치과','한의원','약국','서울','부산','대구','인천','광주','대전','울산','경기','강원','제주'];
 
     async function doSearch() {
@@ -49,14 +42,7 @@
         const div = document.getElementById('result');
         btn.disabled = true;
 
-        let parts = raw.split(/\s+/);
-        let sido = '';
-        for (const [k, v] of Object.entries(SIDO)) {
-            if (parts[0] === k) {
-                sido = v; parts = parts.slice(1); break;
-            }
-        }
-        const name = parts.join(' ');
+        const name = raw.replace(/\s+/g, '');
 
         if (name.length <= 2 || STOP_WORDS.includes(name)) {
             div.innerHTML = '<div class="warn">⚠️ 병원 전체명을 입력해주세요<br><span style="color:#aaa;font-size:12px">예) 서울숲내과의원, 강태영내과, 서울드림이비인후과</span></div>';
@@ -66,18 +52,23 @@
 
         div.innerHTML = '<div class="msg">🔍 조회 중...</div>';
         try {
-            let list = await searchDataGokr(name, sido);
-            if (!list.length) list = await searchHira(name);
+            let list = await searchHira(name);
+
+            // 결과 없으면 끝 단어 제거 후 재검색
+            if (!list.length) {
+                const keyword = name.replace(/(내과|외과|의원|병원|정형외과|이비인후과|치과|한의원|클리닉)$/, '');
+                if (keyword.length >= 2) list = await searchHira(keyword);
+            }
 
             if (!list.length) {
                 div.innerHTML = '<div class="msg">검색 결과 없음<br>병원명을 더 정확하게 입력해보세요</div>';
                 return;
             }
 
-            const results = await Promise.all(list.slice(0, 30).map(async h => {
+            const results = await Promise.all(list.slice(0, 20).map(async h => {
                 const r2 = await fetch(`${WORKER}/?ykiho=${encodeURIComponent(h.ykiho)}`);
                 const j2 = await r2.json();
-                return { name: h.yadmNm, addr: h.addr || '', ykiho: j2.ykiho || null };
+                return { name: h.yadmNm, addr: h.addr || h.addr1 || '', ykiho: j2.ykiho || null };
             }));
 
             div.innerHTML = results.map(h => `
@@ -96,24 +87,13 @@
         }
     }
 
-    async function searchDataGokr(name, sido) {
-        let url = `https://apis.data.go.kr/B551182/hospInfoServicev2/getHospBasisList?ServiceKey=${API_KEY}&yadmNm=${encodeURIComponent(name)}&numOfRows=50&pageNo=1&_type=json`;
-        if (sido) url += `&sidoCdNm=${encodeURIComponent(sido)}`;
-        const r = await fetch(url);
-        const j = await r.json();
-        const items = j?.response?.body?.items?.item || [];
-        return Array.isArray(items) ? items : (items ? [items] : []);
-    }
-
     async function searchHira(name) {
         try {
             const r = await fetch(`${WORKER}/?search=${encodeURIComponent(name)}`);
             const j = await r.json();
             const items = j?.response?.body?.items?.item || j?.items || [];
             return Array.isArray(items) ? items : (items ? [items] : []);
-        } catch(e) {
-            return [];
-        }
+        } catch(e) { return []; }
     }
 
     function copyText(text, btn) {
