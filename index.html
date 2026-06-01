@@ -65,8 +65,7 @@
                 const r1 = await fetch(url);
                 const j1 = await r1.json();
                 const items = j1?.response?.body?.items?.item || [];
-                const raw_list = Array.isArray(items) ? items : (items ? [items] : []);
-                list = raw_list.filter(h => h.yadmNm && h.yadmNm.includes(name));
+                list = Array.isArray(items) ? items : (items ? [items] : []);
                 if (list.length === 0) searchName = searchName.slice(0, -1);
             }
 
