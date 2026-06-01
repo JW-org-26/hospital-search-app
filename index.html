@@ -52,13 +52,12 @@
         let parts = raw.split(/\s+/);
         let sido = '';
         for (const [k, v] of Object.entries(SIDO)) {
-            if (parts[0] === k || parts[0].startsWith(k)) {
+            if (parts[0] === k) {
                 sido = v; parts = parts.slice(1); break;
             }
         }
         const name = parts.join(' ');
 
-        // 너무 짧거나 의미없는 단어 단독 입력 차단
         if (name.length <= 2 || STOP_WORDS.includes(name)) {
             div.innerHTML = '<div class="warn">⚠️ 병원 전체명을 입력해주세요<br><span style="color:#aaa;font-size:12px">예) 서울숲내과의원, 강태영내과, 서울드림이비인후과</span></div>';
             btn.disabled = false;
@@ -67,13 +66,8 @@
 
         div.innerHTML = '<div class="msg">🔍 조회 중...</div>';
         try {
-            // 1차: data.go.kr
             let list = await searchDataGokr(name, sido);
-
-            // 결과 없으면 2차: HIRA Worker 검색
-            if (!list.length) {
-                list = await searchHira(name);
-            }
+            if (!list.length) list = await searchHira(name);
 
             if (!list.length) {
                 div.innerHTML = '<div class="msg">검색 결과 없음<br>병원명을 더 정확하게 입력해보세요</div>';
