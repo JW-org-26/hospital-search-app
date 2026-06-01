@@ -60,7 +60,7 @@
             }
 
             if (!list.length) {
-                div.innerHTML = '<div class="msg">검색 결과 없음<br>병원명을 더 정확하게 입력해보세요</div>';
+                div.innerHTML = '<div class="msg">검색 결과가 없습니다.<br><span style="font-size:12px">심평원 서버가 혼잡할 수 있습니다.<br>오후 2시 이후에 다시 시도해보세요 🙏</span></div>';
                 return;
             }
 
@@ -80,7 +80,7 @@
                 </div>
             `).join('');
         } catch(e) {
-            div.innerHTML = `<div class="msg">오류: ${e.message}</div>`;
+            div.innerHTML = `<div class="msg">⚠️ 서버 오류가 발생했습니다.<br><span style="font-size:12px">심평원 서버가 혼잡할 수 있습니다.<br>오후 2시 이후에 다시 시도해보세요 🙏</span></div>`;
         } finally {
             btn.disabled = false;
         }
