@@ -14,74 +14,77 @@
         .hosp-name { font-weight: bold; font-size: 16px; }
         .hosp-addr { font-size: 12px; color: #666; margin: 5px 0; }
         .ykiho { font-size: 24px; font-weight: 900; color: #4f46e5; margin: 8px 0; }
-        .copy-btn { padding: 6px 14px; background: #e0e7ff; color: #4f46e5; border: 1px solid #c7d2fe; border-radius: 6px; cursor: pointer; font-size: 13px; }
+        .copy-btn { padding: 6px 14px; background: #e0e7ff; color: #4f46e5; border: 1px solid #c7d2fe; border-radius: 8px; cursor: pointer; font-size: 13px; }
         .msg { color: #888; margin-top: 20px; }
-        .warn { color: #e00055; margin-top: 20px; font-size: 14px; }
     </style>
 </head>
 <body>
     <h2>🏥 요양기관기호 조회</h2>
-    <p style="color:#888;font-size:13px">예) 연세의원 → 남양주 연세의원</p>
+    <p style="color:#888;font-size:13px">예: 서울숲내과, 남양주 연세의원</p>
     <div class="search-box">
-        <input type="text" id="inp" placeholder="예: 남양주 연세의원"
-               onkeydown="if(event.key==='Enter')doSearch()">
+        <input type="text" id="inp" placeholder="병원명 입력" onkeydown="if(event.key==='Enter')doSearch()">
         <button id="btn" onclick="doSearch()">조회</button>
     </div>
     <div id="result"></div>
+
     <script>
         const WORKER = 'https://royal-field-b7e1.shrckdi1.workers.dev';
-        const STOP_WORDS = ['의원','병원','클리닉','내과','외과','치과','한의원','약국','서울','부산','대구','인천','광주','대전','울산','경기','강원','제주'];
 
         async function doSearch() {
             const raw = document.getElementById('inp').value.trim();
             if (!raw) return;
+            
             const btn = document.getElementById('btn');
             const div = document.getElementById('result');
             btn.disabled = true;
+            div.innerHTML = '<div class="msg">🔍 검색 중...</div>';
 
+            // 1. 입력 분석: 지역명과 병원명 분리
             const parts = raw.split(/\s+/);
             const area = parts.length > 1 ? parts[0] : '';
-            const hospitalName = parts.length > 1 ? parts.slice(1).join('') : raw.replace(/\s+/g, '');
+            const rawName = parts.length > 1 ? parts.slice(1).join('') : raw;
+            const cleanName = rawName.replace(/\s+/g, '');
 
-            if (hospitalName.length <= 2 || STOP_WORDS.includes(hospitalName)) {
-                div.innerHTML = '<div class="warn">⚠️ 병원 전체명을 입력해주세요<br><span style="color:#aaa;font-size:12px">예) 서울숲내과의원, 강태영내과, 남양주 연세의원</span></div>';
+            // 2. 스마트 검색어 생성 (전체이름 -> 접미사 제거이름)
+            const strippedName = cleanName.replace(/(내과|외과|의원|병원|정형외과|이비인후과|치과|한의원|클리닉|피부과|안과)$/, '');
+            const searchQueries = [cleanName];
+            if (strippedName !== cleanName && strippedName.length >= 2) searchQueries.push(strippedName);
+
+            // 3. 순차적 검색 시도
+            let list = [];
+            for (let query of searchQueries) {
+                list = await searchHira(query);
+                if (list.length > 0) break;
+            }
+
+            // 4. 지역 필터링 (결과가 있다면)
+            if (area && list.length > 0) {
+                const filtered = list.filter(h => h.addr && h.addr.includes(area));
+                if (filtered.length > 0) list = filtered;
+            }
+
+            if (!list.length) {
+                div.innerHTML = '<div class="msg">검색 결과가 없습니다.<br>병원명을 조금 더 정확히 입력해보세요.</div>';
                 btn.disabled = false;
                 return;
             }
 
-            div.innerHTML = '<div class="msg">🔍 검색 중...</div>';
-            try {
-                let list = await searchHira(hospitalName);
-                if (!list.length) {
-                    const keyword = hospitalName.replace(/(내과|외과|의원|병원|정형외과|이비인후과|치과|한의원|클리닉)$/, '');
-                    if (keyword.length >= 2) list = await searchHira(keyword);
-                }
-                if (area && list.length > 0) {
-                    const filtered = list.filter(h => h.addr && h.addr.includes(area));
-                    if (filtered.length > 0) list = filtered;
-                }
-                if (!list.length) {
-                    div.innerHTML = '<div class="msg">검색 결과가 없습니다.</div>';
-                    return;
-                }
-                const results = await Promise.all(list.slice(0, 10).map(async h => {
-                    const r2 = await fetch(`${WORKER}/?ykiho=${encodeURIComponent(h.ykiho)}`);
-                    const j2 = await r2.json();
-                    return { name: h.yadmNm, addr: h.addr, ykiho: j2.ykiho };
-                }));
-                div.innerHTML = results.map(h => `
-                    <div class="card">
-                        <div class="hosp-name">${h.name}</div>
-                        <div class="hosp-addr">${h.addr}</div>
-                        <div class="ykiho">${h.ykiho || '기호 없음'}</div>
-                        ${h.ykiho ? `<button class="copy-btn" onclick="copyText('${h.ykiho}',this)">📋 복사</button>` : ''}
-                    </div>
-                `).join('');
-            } catch(e) {
-                div.innerHTML = `<div class="msg">오류: ${e.message}</div>`;
-            } finally {
-                btn.disabled = false;
-            }
+            // 5. 결과 상세 조회
+            const results = await Promise.all(list.slice(0, 10).map(async h => {
+                const r2 = await fetch(`${WORKER}/?ykiho=${encodeURIComponent(h.ykiho)}`);
+                const j2 = await r2.json();
+                return { name: h.yadmNm, addr: h.addr, ykiho: j2.ykiho };
+            }));
+
+            div.innerHTML = results.map(h => `
+                <div class="card">
+                    <div class="hosp-name">${h.name}</div>
+                    <div class="hosp-addr">${h.addr}</div>
+                    <div class="ykiho">${h.ykiho || '정보 없음'}</div>
+                    ${h.ykiho ? `<button class="copy-btn" onclick="copyText('${h.ykiho}',this)">📋 복사</button>` : ''}
+                </div>
+            `).join('');
+            btn.disabled = false;
         }
 
         async function searchHira(name) {
